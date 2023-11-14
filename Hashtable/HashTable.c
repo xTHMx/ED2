@@ -424,7 +424,7 @@ void removerFilme(PrimaryKey **pArr, SecondaryKey **sArr, int *tamanho, char key
         pos = pKey->RNN * (maxSize+1);
 
         fseek(dados, pos, SEEK_SET);
-        fprintf(dados, "**"); //marca para ser deletado
+        fprintf(dados, "*|"); //marca para ser deletado
         fclose(dados);
 
         //busca posiçao da chave na memoria
@@ -470,8 +470,8 @@ void modificarNota(int memPos, int nota)
     int counter = 0;
     char c;
 
-    FILE *dados = fopen(DataFile, "r+");
-
+    FILE *dados = fopen(DataFile, "r+");    
+    fseek(dados, pos, SEEK_SET);
     if(dados)
     {
         while(counter < 6 && (c=fgetc(dados)) != EOF ) //procura até achar a nota
@@ -481,13 +481,12 @@ void modificarNota(int memPos, int nota)
 
         if(counter == 6)
         {
-        fprintf(dados, "%d", nota); 
-        printf("Modificado!\n");
+            fprintf(dados, "%d", nota); 
+            printf("Modificado!\n");
         } 
 
         fclose(dados);
-    }
-    
+    } 
 
 }
 

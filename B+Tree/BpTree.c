@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 //é nessesario excluir arquivos antigos quando alterar o define!!!!
 #define order 5 //significa ordem 6, levando em conta o 0 como elemento
@@ -63,7 +64,7 @@ BpTree* createTree(int degree)
 {
     BpTree* tree = (BpTree*) malloc(sizeof(BpTree));
     tree->root = -1;
-    tree->degree = degree;
+    tree->degree = degree-1;
     tree->pageCount = 0;
 
     return tree;
@@ -118,7 +119,7 @@ No *createNode(BpTree *tree)
         no->parent = -1;
         no->next_node = -1;
     
-        for(i = 0; i < order; i++){
+        for(i = 0; i < tree->degree; i++){
             strcpy(no->keys[i], "!");
             no->dataRNN[i] = -1;
             no->child[i] = -1;
@@ -158,6 +159,7 @@ void overwriteNode(int RNN, No *new)
 }
 
 
+//troca o RNN da raiz no arquivo
 void changeRoot(int rootRNN)
 {
     FILE *fp = fopen(treeFile, "r+b"); //abre p arquivo em binario
@@ -208,10 +210,11 @@ No* search(No *root, char key[6])
 }
 
 //insere em algum ponto da arvore
-void insertInsideTree(Filme fil, BpTree *tree, No *parent, No *child){
+void insertInsideTree(BpTree *tree, Filme fil, char curKey[6], No *parent, No *child){
     int i, j;
     
     No *new;
+    No *temp;
     char tempKeys[tree->degree + 1][6]; //carrega keys com extra
     int ptrs[tree->degree + 2]; //carrega ponteiros RNN extra
     
@@ -219,7 +222,7 @@ void insertInsideTree(Filme fil, BpTree *tree, No *parent, No *child){
         if(parent->numKeys < tree->degree)
         {
             i=0;
-            while(strcmp(fil.key, parent->keys[i]) && i < tree->degree-1 )
+            while(strcmp(curKey, parent->keys[i]) > 0 && i < parent->numKeys )
                 i++;
                 
             for (j = parent->numKeys; j > i; j--)
@@ -229,15 +232,38 @@ void insertInsideTree(Filme fil, BpTree *tree, No *parent, No *child){
             }
             parent->child[j+1] = parent->child[j];
             
-            strcpy(parent->keys[i], fil.key);
+            strcpy(parent->keys[i], curKey);
             parent->numKeys++;
             parent->child[i + 1] = child->RNN;
+            
+            child->parent = parent->RNN; //troca o pai do inserido
 
-            overwriteNode(parent->RNN, parent);
+            /*liga filhos
+            if(child->isLeaf == 1)
+            {
+                temp = loadNode(parent->child[i]);
+                if(temp != NULL){
+                    temp->next_node = child->RNN;
+                    overwriteNode(temp->RNN, temp);
+                    free(temp);
+                }
+
+                temp = loadNode(parent->child[i+2]);         
+                 if(temp != NULL){
+                    child->next_node = temp->RNN;
+                    overwriteNode(temp->RNN, temp);
+                    free(temp);
+                }
+            }
+            */
+
+            overwriteNode(parent->RNN, parent); //aplica a nova alteração no pai
+            overwriteNode(child->RNN, child); //aplica a alteraçao no filho (cumulativo da anterior)
             free(parent);
         }
         else //split
         {
+            printf("Resplit\n");
             new = createNode(tree);
             
             for (i = 0; i < tree->degree ; i++) //copy old data
@@ -248,7 +274,7 @@ void insertInsideTree(Filme fil, BpTree *tree, No *parent, No *child){
             ptrs[i+1] = parent->child[i+1];
             
             i = 0;
-            while(strcmp(fil.key, parent->keys[i]) <= 0 && i < tree->degree)
+            while(strcmp(curKey, parent->keys[i]) > 0 && i < tree->degree)
                 i++;
                 
             for (j = tree->degree + 1; j > i; j--) //distribui chaves e ponteiros
@@ -258,56 +284,62 @@ void insertInsideTree(Filme fil, BpTree *tree, No *parent, No *child){
             }
             parent->child[j+1] = parent->child[j];
             
-            strcpy(tempKeys[i], fil.key);
+            //adiciona chave
+            strcpy(tempKeys[i], curKey);
+            parent->child[i+1] = child->RNN;
+
             new->isLeaf = 0; //deixa de ser folha
             parent->numKeys = (tree->degree + 1) / 2; //recebe metade dos dados
             new->numKeys = tree->degree - ((tree->degree + 1) / 2);
             
             //reparte
             for (i = 0, j = parent->numKeys + 1; i < new->numKeys; i++, j++)
-            {
                 strcpy(new->keys[i], tempKeys[j]);
-            }
+
             for (i = 0, j = parent->numKeys + 1; i < new->numKeys + 1; i++, j++)
-            {
                 new->child[i] = ptrs[j];
-            }
             
             if(parent->RNN == tree->root) //se o pai era a root da arvore
             {
-                No* tempRoot;
+                No* tempRoot, *tempParent, *tempChild[2];
                 tempRoot = createNode(tree);
+                tempParent = loadNode(parent->RNN);
+                
                 strcpy(tempRoot->keys[0], parent->keys[parent->numKeys]); //maior da esquerda
                 tempRoot->child[0] = parent->RNN;
                 tempRoot->child[1] = new->RNN;
+
+                new->parent = tempRoot->RNN; //troca referencia do pai
+                tempParent->parent = tempRoot->RNN;
+
                 tempRoot->isLeaf = 0;
                 tempRoot->numKeys++;             
                 tree->root = tempRoot->RNN;
-                parent->next_node = -1; //remove se ouver ligaçao de nos folhas
 
                 //salva new e parent em arquivo
-                overwriteNode(parent->RNN, parent);
+                overwriteNode(parent->RNN, tempParent);
                 overwriteNode(new->RNN, new);
+                overwriteNode(tempRoot->RNN, tempRoot);
                 changeRoot(tree->root); //deu split, novo root
 
                 //limpa
                 free(new);
                 free(parent);
                 free(tempRoot);
+                free(tempParent);
             }
             else
             {
-                insertInsideTree(fil, tree, search(loadNode(tree->root), parent->keys[0]), new);
+                insertInsideTree(tree, fil, parent->keys[parent->numKeys], loadNode(parent->parent), new);
                 //search vai ser usado somente para achar a pagina
             }
             
         }
     }
     else{
-        printf("Parent é NULL!/n");
+        printf("Parent é NULL!\n");
     }
     
-    //talves precise reescrever as tres paginas aqui
 }
 
 //função principal de inserção
@@ -315,6 +347,7 @@ void insertTree(BpTree *tree, Filme fil)
 {
     int i, j;
     int inserted = 0;
+    printf("Start!\n");
 
     No *root = loadNode(tree->root);
     No *parent = NULL, *new = NULL;
@@ -335,11 +368,12 @@ void insertTree(BpTree *tree, Filme fil)
     }
     else
     {
-        while(root->isLeaf == 0 && inserted!=1)
+        
+        while(root->isLeaf == 0 && inserted != 1)
         {
-            parent = root; //salva o pai
+            //parent = root; //salva o pai
             
-            for (i = 0; (i < root->numKeys) && (inserted == 1); i++)
+            for (i = 0; (i < root->numKeys) && (inserted != 1); i++)
             {
                 if (strcmp(fil.key , root->keys[i]) < 0)
                 {
@@ -349,7 +383,7 @@ void insertTree(BpTree *tree, Filme fil)
                     inserted = 1;
                 }
                 
-                if (i == root->numKeys - 1)
+                if (i == root->numKeys - 1) //ultimo elemento
                 {
                     temp = root;
                     root = loadNode(root->child[i+1]);
@@ -380,6 +414,7 @@ void insertTree(BpTree *tree, Filme fil)
         }
         else //requer split
         {
+            printf("Split!\n");
             new = createNode(tree);
             
             for (i = 0; i < tree->degree; i++)
@@ -395,8 +430,9 @@ void insertTree(BpTree *tree, Filme fil)
             //insere a key
             strcpy(keys[i], fil.key);
             new->isLeaf = 1;
-            root->numKeys = (tree->degree + 1) / 2;
-            new->numKeys = tree->degree + 1 - (tree->degree + 1) / 2;
+            root->numKeys = ceil((tree->degree + 1) / 2);
+            new->numKeys = ceil(tree->degree + 1 - (tree->degree + 1) / 2);
+            //new->parent = root->parent;
             
             root->child[root->numKeys] = new->RNN;
             new->child[new->numKeys] = root->child[tree->degree];
@@ -408,32 +444,43 @@ void insertTree(BpTree *tree, Filme fil)
             for (i = 0, j = root->numKeys; i < new->numKeys; i++, j++)
                 strcpy(new->keys[i], keys[j]);
 
-            if (root->RNN == tree->root) //se for a root da arvore
-            {
-                No *nRoot = createNode(tree);
-                
-                strcpy(nRoot->keys[0], new->keys[0]); //aumenta o grau da arvore
-                nRoot->child[0] = root->RNN;
-                nRoot->child[1] = new->RNN;
-                nRoot->isLeaf = 0;
-                nRoot->numKeys++;
-                tree->root = nRoot->RNN;
+            //liga as folhas
+            root->next_node = new->RNN;
 
-                root->next_node = new->RNN; //liga as folhas (new e root sao folhas)
+            if (root->RNN == tree->root) //se for split na root da arvore
+            {
+                No *tempRoot = createNode(tree);
+                
+                strcpy(tempRoot->keys[0], new->keys[0]); //aumenta o grau da arvore
+                tempRoot->child[0] = root->RNN; //aponta pros filhos
+                tempRoot->child[1] = new->RNN;
+
+                new->parent = tempRoot->RNN; //troca referencia do pai
+                root->parent = tempRoot->RNN;
+
+                tempRoot->isLeaf = 0;
+                tempRoot->numKeys++;
+                tree->root = tempRoot->RNN;
+
+                //root->next_node = new->RNN; //liga as folhas (new e root sao folhas)
 
                 overwriteNode(root->RNN, root); //reajusta os nós no arquivo
                 overwriteNode(new->RNN, new); //adiciona a nova folha
-                overwriteNode(nRoot->RNN, nRoot); //adiciona a nova raiz
+                overwriteNode(tempRoot->RNN, tempRoot); //adiciona a nova raiz
                 changeRoot(tree->root);
 
                 //limpa
                 free(new);
                 free(root);
-                free(nRoot);
+                free(tempRoot);
             }
             else
             {
-                insertInsideTree(fil, tree, parent, new);
+                printf("NonLeaf!??\n");
+                overwriteNode(root->RNN, root); //aplica alteração da root antes de prossegur
+                overwriteNode(new->RNN, new); 
+                insertInsideTree(tree, fil, new->keys[0], loadNode(root->parent), new);
+                //é necessario passar o valor da key a ser promovida para ordenar direito e evitar bugs
             }
         }
     }
@@ -443,30 +490,38 @@ void insertTree(BpTree *tree, Filme fil)
 void printTreeFrom(No *root) 
 {
     No *temp;
-    int i = 0;
-    int j;
+    int i = 0, j;
+    int isLast;
 
     if(root != NULL)
     {
         // iterate the node element
-        while(i < root->numKeys)
+        while(root->isLeaf == 0)
         {
-            if(root->isLeaf==0)
-            {
-                // When node is not leaf
-                printTreeFrom(loadNode(root->child[i]));
-            }
-            else
-            {
-                // Print the left node value
-                printf("%s ",root->keys[i]); 
-            }
-            i++;
+            temp = root;
+            root = loadNode(root->child[0]);
+            free(temp);
         }
         
-        if(root != NULL && root->isLeaf == 0)
+        if(root->isLeaf == 1) //cheguei na folhas -> lista de folhas
         {
-            printTreeFrom(loadNode(root->child[i]));
+            isLast = 0;
+            while(isLast != 1)
+            {
+                printf("-->");
+                if(root->next_node == -1) //ultima lista a ser printada
+                    isLast = 1;
+
+                for(i = 0; i < root->numKeys; i++)
+                {
+                    printf("%s ", root->keys[i]);
+                }
+
+                temp = root;
+                root = loadNode(root->next_node);
+                free(temp);
+                
+            }
         }
     }
     
@@ -669,7 +724,7 @@ void checkFiles(){
 int main(int argc, char const *argv[]){
 
     BpTree *tree = createTree(order);
-    Filme fil, fil2, fil3, fil4, fil5, fil6;
+    Filme fil, fil2, fil3, fil4, fil5, fil6, fil7, fil8, fil9, fil10, fil11, fil12, fil13;
     No *temp;
 
     strcpy(fil.key, "CCCCC");
@@ -678,6 +733,14 @@ int main(int argc, char const *argv[]){
     strcpy(fil4.key, "FFFFF");
     strcpy(fil5.key, "DDDDD");
     strcpy(fil6.key, "XXXXX");
+
+    strcpy(fil7.key, "EEEEE");
+    strcpy(fil8.key, "SSSSS");
+    strcpy(fil9.key, "GGGGG");
+    strcpy(fil10.key, "HHHHH");
+    strcpy(fil11.key, "YYYYY");
+    strcpy(fil12.key, "TTTTT");
+    strcpy(fil13.key, "WWWWW");
     
 
     checkFiles(); //verifica integridade dos arquivos
@@ -688,11 +751,19 @@ int main(int argc, char const *argv[]){
     insertTree(tree, fil4);
     insertTree(tree, fil5);
     insertTree(tree, fil6);
+    insertTree(tree, fil7);
+    insertTree(tree, fil8);
+    insertTree(tree, fil9);
+    insertTree(tree, fil10);
+    insertTree(tree, fil11);
+    insertTree(tree, fil12);
+    insertTree(tree, fil13);
     
     temp = loadNode(tree->root);
-    printTreeFrom(temp);
-    printf(" Root--%s", temp->keys[0]);
+    printf(" pageCount: %d\n", tree->pageCount);
+    printf(" Root-%d--%s\n", tree->root, temp->keys[0]);
 
+    printTreeFrom(temp);
     printf("\nFinalizado!\n");
 
     return 0;
@@ -700,5 +771,39 @@ int main(int argc, char const *argv[]){
 
 /*problemas secundarios
 1) nós nao limpao chaves antigas quando sao repartidas
+
+
+
+void printTreeFrom(No *root) 
+{
+    No *temp;
+    int i = 0;
+    int j;
+
+    if(root != NULL)
+    {
+        // iterate the node element
+        while(i < root->numKeys)
+        {
+            if(root->isLeaf==0)
+            {
+                // When node is not leaf
+                printTreeFrom(loadNode(root->child[i]));
+            }
+            else
+            {
+                // Print the left node value
+                printf("%s ",root->keys[i]); 
+            }
+            i++;
+        }
+        
+        if(root != NULL && root->isLeaf == 0)
+        {
+            printTreeFrom(loadNode(root->child[i]));
+        }
+    }
+    
+}
 
 */

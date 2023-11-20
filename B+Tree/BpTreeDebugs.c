@@ -190,6 +190,7 @@ void loadTree(BpTree *tree)
 
     if(fp != NULL)
     {
+        //printf("Reload!"); 
         for(int i = 0; i < 4; i++)
         {
             fscanf(fp, "%d", &data[i]);
@@ -225,6 +226,7 @@ No* searchPage(No *no, char key[6])
             found = 0;
             for(i = 0; (i <= no->numKeys) && (found == 0); i++)
             {
+                printf("looped");
                 if(i == no->numKeys)
                 {
                     if(no->child[i] != -1)
@@ -277,7 +279,9 @@ void saveFilme(Filme *entry){
     else
     {
         fprintf(dados, "%s@%s@%s@%s@%s@%s@%d", entry->key, entry->titulo, entry->titulo_ori, entry->diretor, entry->ano, entry->pais, entry->nota);
+        //fprintf(dados, "%s@%s@%s@%s@%s@%s@%d", entry.key, "entry.titulo", "entry.titulo_ori", "entry.diretor", "2002", "entry.pais", 0);
         for(i = 0; i < (maxSize - (entry->somaBytes)); i++) fprintf(dados,"#"); //preenche de dados
+        //for(i = 0; i < (maxSize - (67)); i++) fprintf(dados,"#"); //preenche de dados
         fprintf(dados, "\n");
     }
     fclose(dados);
@@ -331,6 +335,7 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
         }
         else //split
         {
+            printf("Resplit\n");
             new = createNode(tree);
             
             for (i = 0; i < tree->degree+1; i++) //copy old data
@@ -424,6 +429,7 @@ void insertTree(BpTree *tree, Filme *fil)
 {
     int i, j;
     int inserted = 0;
+    printf("Start!\n");
 
     No *root = loadNode(tree->root);
     No *parent = NULL, *new = NULL;
@@ -509,6 +515,7 @@ void insertTree(BpTree *tree, Filme *fil)
         }
         else //requer split
         {
+            printf("Split!\n");
             new = createNode(tree);
             
             for (i = 0; i < tree->degree; i++){
@@ -820,7 +827,7 @@ void modificarNota(int RNN, int nota)
         if(counter == 6)
         {
             fprintf(dados, "%d", nota); 
-            printf("Nota Modificada!\n");
+            printf("Modificado!\n");
         } 
 
         fclose(dados);
@@ -1065,12 +1072,48 @@ int main(int argc, char const *argv[]){
             sArr[i].title = malloc(sizeof(char) * (tamanho-4));
             strcpy(sArr[i].title, tempTitle);
             strcpy(sArr[i].key, tempKey);
+            //printf("%s ",(*arrTitle)[i].key);
 
             i++;
         }
 
         fclose(sFile);
     }
+    
+    /* debug de valores na arvore
+    Filme fil, fil2, fil3, fil4, fil5, fil6, fil7, fil8, fil9, fil10, fil11, fil12, fil13, fil14;
+    strcpy(fil.key, "CCCCC");
+    strcpy(fil2.key, "BBBBB");
+    strcpy(fil3.key, "AAAAA");
+    strcpy(fil4.key, "FFFFF");
+    strcpy(fil5.key, "DDDDD");
+    strcpy(fil6.key, "XXXXX");
+
+    strcpy(fil7.key, "EEEEE");
+    strcpy(fil8.key, "SSSSS");
+    strcpy(fil9.key, "GGGGG");
+    strcpy(fil10.key, "HHHHH");
+    strcpy(fil11.key, "YYYYY");
+    strcpy(fil12.key, "TTTTT");
+    strcpy(fil13.key, "WWWWW");
+    strcpy(fil14.key, "WWWWW");
+    insertTree(tree, fil);   
+    insertTree(tree, fil2);
+    insertTree(tree, fil3);
+    insertTree(tree, fil4);
+    insertTree(tree, fil5);
+    insertTree(tree, fil6);
+    insertTree(tree, fil7);
+    insertTree(tree, fil8);
+    insertTree(tree, fil9);
+    insertTree(tree, fil10);
+    insertTree(tree, fil11);
+    insertTree(tree, fil12);
+    insertTree(tree, fil13);
+    //insertTree(tree, fil);
+
+    changeNota(fil12.key, 2, tree);
+    */
 
     //operaçoes
     while(op != 0)
@@ -1101,11 +1144,53 @@ int main(int argc, char const *argv[]){
         fclose(sFile);
     }
 
-    //para exibir os dados nas folhas
-    //temp = loadNode(tree->root);
-    //printTreeFrom(temp);
+    
+    temp = loadNode(tree->root);
+    printf(" pageCount: %d\n", tree->pageCount);
+    printf(" Root-%d--%s\n", tree->root, temp->keys[0]);
 
+    printTreeFrom(temp);
     printf("\nFinalizado!\n");
 
     return 0;
 }
+
+
+/*problemas secundarios
+1) nós nao limpao chaves antigas quando sao repartidas
+
+
+
+void printTreeFrom(No *root) 
+{
+    No *temp;
+    int i = 0;
+    int j;
+
+    if(root != NULL)
+    {
+        // iterate the node element
+        while(i < root->numKeys)
+        {
+            if(root->isLeaf==0)
+            {
+                // When node is not leaf
+                printTreeFrom(loadNode(root->child[i]));
+            }
+            else
+            {
+                // Print the left node value
+                printf("%s ",root->keys[i]); 
+            }
+            i++;
+        }
+        
+        if(root != NULL && root->isLeaf == 0)
+        {
+            printTreeFrom(loadNode(root->child[i]));
+        }
+    }
+    
+}
+
+*/

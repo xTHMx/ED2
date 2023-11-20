@@ -8,7 +8,7 @@
 #define order 5 //significa ordem 6, levando em conta o 0 como elemento
 #define maxSize 192
 #define filmesFile "filmes.dat"
-#define treeFile "ibtree.dat"
+#define treeFile "tree.dat"
 #define titleFile "ititle.idx"
 
 //usando '!' para verificar key vazia
@@ -53,7 +53,6 @@ typedef struct No { //No/Pagina da arvore
 typedef struct BpTree{ //Struct da arvore
     int root; //RNN da root
     int pageCount;
-    int dataCount;
     int degree;
 
 }BpTree;
@@ -65,9 +64,8 @@ BpTree* createTree(int degree)
 {
     BpTree* tree = (BpTree*) malloc(sizeof(BpTree));
     tree->root = -1;
-    tree->degree = degree - 1;
+    tree->degree = degree-1;
     tree->pageCount = 0;
-    tree->dataCount = 0;
 
     return tree;
 }
@@ -85,7 +83,7 @@ No* loadNode(int RNN)
             load = (No*) malloc(sizeof(No));
             if(load != NULL)
             {
-                fseek(fp, 9 + (RNN * sizeof(No)), SEEK_SET); //+9 por causa do flag
+                fseek(fp, 1 + (RNN * sizeof(No)), SEEK_SET); //+1 por causa do flag
                 fread(load, sizeof(No), 1, fp);
                 
                 fclose(fp);
@@ -143,7 +141,7 @@ void overwriteNode(int RNN, No *new)
     {
         if(new != NULL)
         {
-            fseek(fp, 9 + (RNN * sizeof(No)), SEEK_SET); //8 é offset dos dados da arvore no geral +1 pra começar na 9 posiçao
+            fseek(fp, 1 + (RNN * sizeof(No)), SEEK_SET);
             fwrite(new, sizeof(No), 1, fp);
         }
         else
@@ -162,17 +160,14 @@ void overwriteNode(int RNN, No *new)
 
 
 //troca o RNN da raiz no arquivo
-void changeRoot(BpTree *tree)
+void changeRoot(int rootRNN)
 {
     FILE *fp = fopen(treeFile, "r+b"); //abre p arquivo em binario
     
     if(fp)
     {
         fseek(fp, 0, SEEK_SET);
-        fprintf(fp, "%d/", tree->root);
-        fprintf(fp, "%d/", tree->degree);
-        fprintf(fp, "%d/", tree->pageCount);
-        fprintf(fp, "%d/", tree->dataCount);
+        fprintf(fp, "%d", rootRNN);
     }
     else
     {
@@ -182,125 +177,45 @@ void changeRoot(BpTree *tree)
     fclose(fp);
 }
 
-//save or load tree to file
-void loadTree(BpTree *tree)
+
+No* search(No *root, char key[6])
 {
-    FILE *fp = fopen(treeFile, "rb");
-    int data[4];
+    No *no = loadNode(root->RNN);
+    int found = 0;
 
-    if(fp != NULL)
+    while(!no->isLeaf)
     {
-        //printf("Reload!"); 
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; (i < no->numKeys) && (found != 0); i++)
         {
-            fscanf(fp, "%d", &data[i]);
-            fgetc(fp); //gasta delimitador
-        }
-
-        tree->root = data[0];
-        tree->degree = data[1];
-        tree->pageCount = data[2];
-        tree->dataCount = data[3];
-
-        fclose(fp);
-    }
-
-}
-
-//procura uma pagina na memoria -> nem sempre a chave esta nela, apenas carrega a pagina mais provavel
-No* searchPage(No *no, char key[6])
-{
-    No *temp = no;
-    int found;
-    int i;
-
-    if(no != NULL)
-    {
-        if(no->isLeaf == 1){
-            //printf("page: %d,é folha %s\n", no->RNN, no->keys[0]);
-            return no;
-        }
-
-        while(no->isLeaf == 0)
-        {
-            found = 0;
-            for(i = 0; (i <= no->numKeys) && (found == 0); i++)
+            if(i == no->numKeys)
             {
-                printf("looped");
-                if(i == no->numKeys)
-                {
-                    if(no->child[i] != -1)
-                    {
-                        temp = no;
-                        no = loadNode(no->child[i]);
-                        free(temp);
-                        found = 1; //necessita pra sair de um loop infinito
-
-                    }else{
-                        printf("Não encontrado\n");
-                        return NULL;
-                    }
-                }
-
-                if(strcmp(key, no->keys[i]) < 0)
-                {
-                    if(no->child[i] != -1)
-                    {
-                        temp = no;
-                        no = loadNode(no->child[i]);
-                        free(temp);
-                    }
-
-                    found = 1;
-                }
-
-               if(no->isLeaf == 1) printf("page: %d,é folha %s\n", no->RNN, no->keys[0]);
-
+                no = loadNode(no->child[i+1]);
             }
+
+            if(strcmp(key, no->keys[i]) <= 0)
+            {
+                no = loadNode(no->child[i]);
+                found = 1;
+            }
+
         }
     }
-    else
-    {
-        printf("Arvore vazia!\n");
+    
+    if(no == NULL){
+        printf("Não encontrado!/n");
     }
 
     return no; //Null se não achar
 
 }
 
-void saveFilme(Filme *entry){
-    FILE *dados = fopen(filmesFile, "a");
-    int i;
-
-    if(!dados) //se nao existir eu crio
-    {
-        dados = fopen(filmesFile, "w");
-    }
-    else
-    {
-        fprintf(dados, "%s@%s@%s@%s@%s@%s@%d", entry->key, entry->titulo, entry->titulo_ori, entry->diretor, entry->ano, entry->pais, entry->nota);
-        //fprintf(dados, "%s@%s@%s@%s@%s@%s@%d", entry.key, "entry.titulo", "entry.titulo_ori", "entry.diretor", "2002", "entry.pais", 0);
-        for(i = 0; i < (maxSize - (entry->somaBytes)); i++) fprintf(dados,"#"); //preenche de dados
-        //for(i = 0; i < (maxSize - (67)); i++) fprintf(dados,"#"); //preenche de dados
-        fprintf(dados, "\n");
-    }
-    fclose(dados);
-}
-
-void printFilme(Filme *entry)
-{
-    printf("Chave: %s  Titulo: %s  Original: %s  Diretor %s  Ano: %s  País: %s  Nota: %d\n", 
-            entry->key, entry->titulo, entry->titulo_ori, entry->diretor, entry->ano, entry->pais, entry->nota);
-}
-
 //insere em algum ponto da arvore
-void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *child){
+void insertInsideTree(BpTree *tree, Filme fil, char curKey[6], No *parent, No *child){
     int i, j;
     
     No *new;
     No *temp;
     char tempKeys[tree->degree + 1][6]; //carrega keys com extra
-    int datas[tree->degree+1];
     int ptrs[tree->degree + 2]; //carrega ponteiros RNN extra
     
     if(parent != NULL){
@@ -313,21 +228,34 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
             for (j = parent->numKeys; j > i; j--)
             {
                 strcpy(parent->keys[j], parent->keys[j-1]);
-                parent->dataRNN[j] = parent->dataRNN[j-1];
-            }
-            
-            for (j = parent->numKeys+1; j > i+1; j--)
-            {
                 parent->child[j] = parent->child[j - 1];
             }
+            parent->child[j+1] = parent->child[j];
             
-            strcpy(parent->keys[i], curKey); //salva o filme
-            parent->dataRNN[i] = tree->dataCount;
-            
+            strcpy(parent->keys[i], curKey);
             parent->numKeys++;
             parent->child[i + 1] = child->RNN;
             
             child->parent = parent->RNN; //troca o pai do inserido
+
+            /*liga filhos
+            if(child->isLeaf == 1)
+            {
+                temp = loadNode(parent->child[i]);
+                if(temp != NULL){
+                    temp->next_node = child->RNN;
+                    overwriteNode(temp->RNN, temp);
+                    free(temp);
+                }
+
+                temp = loadNode(parent->child[i+2]);         
+                 if(temp != NULL){
+                    child->next_node = temp->RNN;
+                    overwriteNode(temp->RNN, temp);
+                    free(temp);
+                }
+            }
+            */
 
             overwriteNode(parent->RNN, parent); //aplica a nova alteração no pai
             overwriteNode(child->RNN, child); //aplica a alteraçao no filho (cumulativo da anterior)
@@ -338,50 +266,42 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
             printf("Resplit\n");
             new = createNode(tree);
             
-            for (i = 0; i < tree->degree+1; i++) //copy old data
+            for (i = 0; i < tree->degree ; i++) //copy old data
             {
                 strcpy(tempKeys[i], parent->keys[i]);
-                datas[i] = parent->dataRNN[i];
                 ptrs[i] = parent->child[i];
             }
             ptrs[i+1] = parent->child[i+1];
             
             i = 0;
-            while(strcmp(curKey, tempKeys[i]) > 0 && i < tree->degree)
+            while(strcmp(curKey, parent->keys[i]) > 0 && i < tree->degree)
                 i++;
                 
             for (j = tree->degree + 1; j > i; j--) //distribui chaves e ponteiros
             {
-                strcpy(tempKeys[j], tempKeys[j-1]);
-                datas[j] = datas[j-1];
+                strcpy(parent->keys[j], parent->keys[j-1]);
+                parent->child[j] = parent->child[j - 1];
             }
-            
-            for (j = tree->degree + 2; j > i+1; j--) //distribui chaves e ponteiros
-            {
-                ptrs[j] = ptrs[j - 1];
-            }
+            parent->child[j+1] = parent->child[j];
             
             //adiciona chave
             strcpy(tempKeys[i], curKey);
-            datas[i] = tree->dataCount;
-            ptrs[i+1] = child->RNN;
+            parent->child[i+1] = child->RNN;
 
-            new->isLeaf = 0; //não é folha
+            new->isLeaf = 0; //deixa de ser folha
             parent->numKeys = (tree->degree + 1) / 2; //recebe metade dos dados
             new->numKeys = tree->degree - ((tree->degree + 1) / 2);
             
             //reparte
-            for (i = 0, j = parent->numKeys + 1; i < new->numKeys; i++, j++){
+            for (i = 0, j = parent->numKeys + 1; i < new->numKeys; i++, j++)
                 strcpy(new->keys[i], tempKeys[j]);
-                new->dataRNN[i] = datas[j];
-            }
 
             for (i = 0, j = parent->numKeys + 1; i < new->numKeys + 1; i++, j++)
                 new->child[i] = ptrs[j];
             
             if(parent->RNN == tree->root) //se o pai era a root da arvore
             {
-                No* tempRoot, *tempParent;
+                No* tempRoot, *tempParent, *tempChild[2];
                 tempRoot = createNode(tree);
                 tempParent = loadNode(parent->RNN);
                 
@@ -400,7 +320,7 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
                 overwriteNode(parent->RNN, tempParent);
                 overwriteNode(new->RNN, new);
                 overwriteNode(tempRoot->RNN, tempRoot);
-                changeRoot(tree); //deu split, novo root
+                changeRoot(tree->root); //deu split, novo root
 
                 //limpa
                 free(new);
@@ -410,8 +330,6 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
             }
             else
             {
-                overwriteNode(parent->RNN, parent);
-                overwriteNode(new->RNN, new);
                 insertInsideTree(tree, fil, parent->keys[parent->numKeys], loadNode(parent->parent), new);
                 //search vai ser usado somente para achar a pagina
             }
@@ -425,7 +343,7 @@ void insertInsideTree(BpTree *tree, Filme *fil, char curKey[6], No *parent, No *
 }
 
 //função principal de inserção
-void insertTree(BpTree *tree, Filme *fil)
+void insertTree(BpTree *tree, Filme fil)
 {
     int i, j;
     int inserted = 0;
@@ -434,23 +352,17 @@ void insertTree(BpTree *tree, Filme *fil)
     No *root = loadNode(tree->root);
     No *parent = NULL, *new = NULL;
     char keys[order+2][6]; //extra pra split
-    int datas[order+2];
     No *temp;
     
     if(tree->root == -1) //primeiro elemento da arvore
     { 
         temp = createNode(tree);
-        strcpy(temp->keys[0], fil->key);
-        temp->isLeaf = 1;
+        strcpy(temp->keys[0], fil.key);
+        temp->isLeaf  = 1;
         temp->numKeys++;
         tree->root = temp->RNN;
 
-        //insere data
-        saveFilme(fil); //write file
-        temp->dataRNN[0] = tree->dataCount;
-        tree->dataCount++;
-
-        changeRoot(tree);
+        changeRoot(temp->RNN);
         overwriteNode(temp->RNN, temp);
         free(temp);
     }
@@ -463,14 +375,7 @@ void insertTree(BpTree *tree, Filme *fil)
             
             for (i = 0; (i < root->numKeys) && (inserted != 1); i++)
             {
-
-                if(strcmp(fil->key , root->keys[i]) == 0) //se ja existir chave cadastrada
-                {
-                    printf("Erro - Chave já existe!");
-                    return;
-                }
-
-                if (strcmp(fil->key , root->keys[i]) < 0)
+                if (strcmp(fil.key , root->keys[i]) < 0)
                 {
                     temp = root;
                     root = loadNode(root->child[i]);
@@ -491,20 +396,14 @@ void insertTree(BpTree *tree, Filme *fil)
         if (root->numKeys < tree->degree) //se houver espaco
         {
             i = 0;
-            while (strcmp(fil->key , root->keys[i]) > 0 && i < root->numKeys)
+            while (strcmp(fil.key , root->keys[i]) > 0 && i < root->numKeys)
                 i++;
             
-            for (j = root->numKeys; j > i; j--){
+            for (j = root->numKeys; j > i; j--)
                 strcpy(root->keys[j], root->keys[j - 1]);
-                root->dataRNN[j] = root->dataRNN[j-1];
-            }
-
+            
             //adiciona ordenado
-            strcpy(root->keys[i], fil->key);
-            saveFilme(fil);
-            root->dataRNN[i] = tree->dataCount;
-            tree->dataCount++;
-
+            strcpy(root->keys[i], fil.key);
             root->numKeys++;
             root->child[root->numKeys] = root->child[root->numKeys - 1];
             root->child[root->numKeys - 1] = -1; //n esquecer de adicionar o novo ponteiro
@@ -518,45 +417,32 @@ void insertTree(BpTree *tree, Filme *fil)
             printf("Split!\n");
             new = createNode(tree);
             
-            for (i = 0; i < tree->degree; i++){
+            for (i = 0; i < tree->degree; i++)
                 strcpy(keys[i], root->keys[i]);
-                datas[i] = root->dataRNN[i];
-            }
             
             i = 0;
-            while (strcmp(fil->key, keys[i]) > 0 && i < tree->degree)
+            while (strcmp(fil.key, keys[i]) > 0 && i < tree->degree)
                 i++;
     
-            for (j = tree->degree + 1; j > i; j--){ //abre espaco para key inserida em meio virtual
+            for (j = tree->degree + 1; j > i; j--) //abre espaco para key inserida
                 strcpy(keys[j], keys[j - 1]);
-                datas[j] = datas[j-1];
-            }
 
-            //insere o filme
-            strcpy(keys[i], fil->key);
-            saveFilme(fil);
-            datas[i] = tree->dataCount;
-            tree->dataCount++;
-
+            //insere a key
+            strcpy(keys[i], fil.key);
             new->isLeaf = 1;
-            root->isLeaf = 1;
-            root->numKeys = (tree->degree + 1) / 2;
-            new->numKeys = tree->degree + 1 - (tree->degree + 1) / 2;
+            root->numKeys = ceil((tree->degree + 1) / 2);
+            new->numKeys = ceil(tree->degree + 1 - (tree->degree + 1) / 2);
             //new->parent = root->parent;
             
             root->child[root->numKeys] = new->RNN;
             new->child[new->numKeys] = root->child[tree->degree];
             root->child[tree->degree] = -1;
 
-            for (i = 0; i < root->numKeys; i++){
+            for (i = 0; i < root->numKeys; i++)
                 strcpy(root->keys[i], keys[i]);
-                root->dataRNN[i] = datas[i];
-            }
 
-            for (i = 0, j = root->numKeys; i < new->numKeys; i++, j++){
+            for (i = 0, j = root->numKeys; i < new->numKeys; i++, j++)
                 strcpy(new->keys[i], keys[j]);
-                new->dataRNN[i] = datas[j];
-            }
 
             //liga as folhas
             root->next_node = new->RNN;
@@ -581,7 +467,7 @@ void insertTree(BpTree *tree, Filme *fil)
                 overwriteNode(root->RNN, root); //reajusta os nós no arquivo
                 overwriteNode(new->RNN, new); //adiciona a nova folha
                 overwriteNode(tempRoot->RNN, tempRoot); //adiciona a nova raiz
-                changeRoot(tree);
+                changeRoot(tree->root);
 
                 //limpa
                 free(new);
@@ -645,7 +531,7 @@ void printTreeFrom(No *root)
 
 char* criaKey(char* diretor, char ano[4])
 {
-    char *key = malloc(sizeof(char) * 6);
+    char *key;
     int i;
 
     for(i = 0; i < 5; i++) //max size
@@ -676,6 +562,18 @@ int cmpStringTitle(const void *a, const void *b) //compara String
     return strcmp(sa.title, sb.title) ;
 }
 
+
+//verifica se existe a chave secundaria
+SecondaryKey* existeChaveSecundaria(SecondaryKey **arr, int tamanho, char title[100])
+{
+    SecondaryKey *sKey = (SecondaryKey*) bsearch(&title, *arr, tamanho, sizeof(SecondaryKey), &cmpStringTitle);
+    if(sKey)
+    {
+        return sKey;
+    }
+
+    return NULL;
+}
 
 Filme* criaFilme(char *key, char *titulo, char *titulo_ori, char *diretor, char ano[4], char *pais, int nota)
 {
@@ -747,55 +645,13 @@ Filme* criaFilmePorPosicao(int index)
 
 }
 
-int buscarFilme(BpTree *tree, char key[6], int doPrint)
-{
-    No *no;
-
-    no = searchPage(loadNode(tree->root), key);
-    if(no)
-    {
-        for(int i = 0; i <= no->numKeys; i++) //olha chaves da pagina
-        {
-            if(i == no->numKeys && strcmp(key, no->keys[i+1]) == 0)
-            {
-                if(doPrint == 1) printFilme(criaFilmePorPosicao(no->dataRNN[i+1]));
-                return no->dataRNN[i+1];
-            }
-
-            if(strcmp(key, no->keys[i]) == 0)
-            {
-                if(doPrint == 1) printFilme(criaFilmePorPosicao(no->dataRNN[i]));
-                return no->dataRNN[i];
-            }
-        }
-    }
-    else
-    {
-        printf("Pagina/Chave não encontrada\n");
-    }
-
-    return -1;
-}
-
 //busca filme pelo titulo da chave secundaria
-int buscarFilmeTitulo(BpTree *tree, SecondaryKey **sArr, char title[100], int doPrint)
-{
-    SecondaryKey *sKey = (SecondaryKey*) bsearch(&title, *sArr, tree->dataCount, sizeof(SecondaryKey), &cmpStringTitle);
-
-    if(sKey)
-    {
-        return buscarFilme(tree, sKey->key, doPrint);
-    }
-    else
-    {
-        printf("Titulo não encontrado!");
-    }
-}
+void buscarFilmeTitulo();
 
 //modifica a nota de um filme
-void modificarNota(int RNN, int nota)
+void modificarNota(int memPos, int nota)
 {
-    int pos = RNN * maxSize;
+    int pos = memPos * maxSize;
     int counter = 0;
     char c;
 
@@ -824,22 +680,14 @@ void modificarNota(int RNN, int nota)
 //modifica a nota do filme
 void changeNota(char key[6], int nota, BpTree *tree)
 {
-    No* no = searchPage(loadNode(tree->root), key);
-    int i;
+    No* no = search(loadNode(tree->root), key);
 
     if(no)
     {
-        for(i = 0; i <= no->numKeys; i++) //olha todas as keys da pagina
+        for(int i = 0; i < order; i++) //olha todas as keys da pagina
         {
-            if(i == no->numKeys && strcmp(no->keys[i-1], key) == 0)
-            {
-                modificarNota(no->dataRNN[i], nota);
-            }
-
             if(strcmp(no->keys[i], key) == 0)
-            {
                 modificarNota(no->dataRNN[i], nota);
-            }
         }
     }
     else
@@ -849,145 +697,6 @@ void changeNota(char key[6], int nota, BpTree *tree)
 
 }
 
-void OpAdicionarFilme(BpTree *tree, SecondaryKey **sArr)
-{
-    char titulo[100], titulo_ori[100], diretor[50], ano[4], pais[20];
-    int nota;
-
-    printf("\nDigite o Titulo do Filme:\n");
-    scanf(" %[^\n]s", titulo);
-    printf("Digite o Titulo Original do Filme:\n");
-    scanf(" %[^\n]s", titulo_ori);
-    printf("Digite o Diretor do Filme: (Siga o padrao: Sobrenome, Nome)\n");
-    scanf(" %[^\n]s", diretor);
-    printf("Digite o ano do lancamento do Filme:\n");
-    scanf(" %s", ano);
-    printf("Digite o Pais Original do Filme:\n");
-    scanf(" %s", pais);
-    printf("Digite a nota do Filme:\n");
-    scanf(" %d", &nota);
-
-    //cria elemento de filme
-    Filme *fil = criaFilme(criaKey(diretor, ano), titulo, titulo_ori, diretor, ano, pais, nota);
-
-    if(fil)
-    {
-        if(sArr != NULL)
-        {
-            *sArr = realloc(*sArr, ((tree->dataCount)+1) * sizeof(SecondaryKey));
-        }
-        else
-        {
-            *sArr = malloc(sizeof(SecondaryKey));
-        }
-
-        //passa dados para array
-        (*sArr)[tree->dataCount].title = malloc((strlen(fil->titulo)+1) * sizeof(char));
-        strcpy((*sArr)[tree->dataCount].title, fil->titulo);
-        strcpy((*sArr)[tree->dataCount].key, fil->key);
-        qsort(*sArr, tree->dataCount, sizeof(SecondaryKey), &cmpStringTitle);
-
-        //insere o filme na arvore
-        insertTree(tree, fil);
-        free(fil);
-    }
-    else
-    {
-        printf("Nao foi possivel criar a instancia do filme! Cheque os valores inseridos!\n");
-    }
-    
-
-}
-
-//retorna se necessario o RNN dos dados
-int opBuscarFilme(BpTree *tree, SecondaryKey **sArr)
-{
-    int op = -1;
-    char key[6], titulo[100];
-    
-
-    while(op != 0)
-    {
-        printf("Digite o tipo de busca:\n<1> - Busca por Chave\n<2>- Busca por Titulo\n<0> - Cancelar\n");
-        scanf(" %d", &op);
-
-        switch(op){
-            case 1: 
-                    printf("Digite a Chave do Filme:\n");
-                    scanf(" %s", key);
-                    return buscarFilme(tree, key, 1); 
-                    break;
-
-            case 2: printf("Digite o Titulo do Filme:\n");
-                    scanf(" %s", titulo);
-                    return buscarFilmeTitulo(tree, sArr, titulo, 1); 
-                    break;
-
-            case 0: return -1; break;
-            default: printf("Opçao invalida!\n"); break;
-        }
-    }
-
-    return -1;
-}
-
-//lista todos os filmes na arvore
-void opListarFilmes(BpTree *tree)
-{
-
-    No *temp;
-    No *root = loadNode(tree->root);
-    Filme *fil;
-    int i = 0, j;
-    int isLast;
-
-    if(root != NULL)
-    {
-        // iterate the node element
-        while(root->isLeaf == 0)
-        {
-            temp = root;
-            root = loadNode(root->child[0]);
-            free(temp);
-        }
-        
-        if(root->isLeaf == 1) //cheguei na folhas -> lista de folhas
-        {
-            isLast = 0;
-            while(isLast != 1)
-            {
-                if(root->next_node == -1) //ultima lista a ser printada
-                    isLast = 1;
-
-                for(i = 0; i < root->numKeys; i++)
-                {
-                    fil = criaFilmePorPosicao(root->dataRNN[i]);
-                    printFilme(fil);
-                }
-
-                temp = root;
-                root = loadNode(root->next_node);
-                free(temp);
-                
-            }
-        }
-    }
-    
-
-}
-
-//modifica a nota do filme
-void opModificarFilme(BpTree *tree)
-{
-    char key[6];
-    int nota;
-    printf("Digite a Chave do Filme:\n");
-    scanf(" %s", key);
-    printf("Digite a nova Nota do Filme:\n");
-    scanf(" %d", &nota);
-
-    changeNota(key, nota, tree);
-}
 
 //checa se todos os arquivos necessarios existem
 void checkFiles(){
@@ -998,16 +707,12 @@ void checkFiles(){
         temp = fopen(treeFile, "w");
         fclose(temp);
     }
-    //temp = fopen(treeFile, "w"); //para debug
-    //fclose(temp);
 
     if((temp = fopen(filmesFile, "r")) == NULL)
     {
         temp = fopen(filmesFile, "w");
         fclose(temp);
     }
-    //temp = fopen(filmesFile, "w"); //para debug
-    //fclose(temp);
 
     if((temp = fopen(titleFile, "r")) == NULL)
     {
@@ -1019,39 +724,9 @@ void checkFiles(){
 int main(int argc, char const *argv[]){
 
     BpTree *tree = createTree(order);
+    Filme fil, fil2, fil3, fil4, fil5, fil6, fil7, fil8, fil9, fil10, fil11, fil12, fil13;
     No *temp;
-    int op = -1;
-    int i; 
 
-    FILE *sFile;
-    SecondaryKey *sArr = NULL;
-    char tempString[100];
-
-    loadTree(tree); //carrega se houver arquivo
-
-    checkFiles(); //verifica integridade dos arquivos
-
-    //carrega lista secundaria do arquivo
-    sFile = fopen(titleFile, "r");
-    if(sFile)
-    {
-        sArr = malloc(sizeof(SecondaryKey) * tree->dataCount); //aloca o tamanho necessario
-        for(i = 0; i < tree->dataCount; i++) //le salvando em array
-        {
-            //carrega titulo e chave
-            fscanf(sFile, "%s", tempString); 
-            sArr[i].title = malloc(sizeof(char) * (strlen(tempString)+1));//n se esqueça de alocar a string
-            strcpy(sArr[i].title, tempString);
-
-            fscanf(sFile, "%s", tempString);
-            strcpy(sArr[i].key, tempString);
-        }
-
-        fclose(sFile);
-    }
-    
-    /* debug de valores na arvore
-    Filme fil, fil2, fil3, fil4, fil5, fil6, fil7, fil8, fil9, fil10, fil11, fil12, fil13, fil14;
     strcpy(fil.key, "CCCCC");
     strcpy(fil2.key, "BBBBB");
     strcpy(fil3.key, "AAAAA");
@@ -1066,8 +741,11 @@ int main(int argc, char const *argv[]){
     strcpy(fil11.key, "YYYYY");
     strcpy(fil12.key, "TTTTT");
     strcpy(fil13.key, "WWWWW");
-    strcpy(fil14.key, "WWWWW");
-    insertTree(tree, fil);   
+    
+
+    checkFiles(); //verifica integridade dos arquivos
+    
+    insertTree(tree, fil);
     insertTree(tree, fil2);
     insertTree(tree, fil3);
     insertTree(tree, fil4);
@@ -1080,39 +758,6 @@ int main(int argc, char const *argv[]){
     insertTree(tree, fil11);
     insertTree(tree, fil12);
     insertTree(tree, fil13);
-    //insertTree(tree, fil);
-
-    changeNota(fil12.key, 2, tree);
-    */
-
-    //operaçoes
-    while(op != 0)
-    {
-        printf("Digite o que deseja fazer:\n<1> - Inserir Filme\n<2> - Buscar Filme\n<3> - Modificar Nota\n<4> - Listar Todos\n<0> - Sair do programa\n");
-        scanf("%d", &op);
-
-        switch(op)
-        {
-            case 1: OpAdicionarFilme(tree, &sArr); break;
-            case 2: opBuscarFilme(tree, &sArr); break;
-            case 3: opModificarFilme(tree); break;
-            case 4: opListarFilmes(tree); break;
-            case 0: changeRoot(tree); break; //saida
-            default: printf("Opçao invalida!\n"); break;
-        }
-    }
-
-    //salva array de Chaves secundarias
-    sFile = fopen(titleFile, "w");
-    if(sFile && sArr != NULL)
-    {
-        for(i = 0; i < tree->dataCount; i++)
-        {
-            fprintf(sFile, "%s %s ", sArr[i].title, sArr[i].key);
-        }
-        fclose(sFile);
-    }
-
     
     temp = loadNode(tree->root);
     printf(" pageCount: %d\n", tree->pageCount);
@@ -1123,7 +768,6 @@ int main(int argc, char const *argv[]){
 
     return 0;
 }
-
 
 /*problemas secundarios
 1) nós nao limpao chaves antigas quando sao repartidas

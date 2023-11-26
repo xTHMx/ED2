@@ -252,8 +252,6 @@ No* searchPage(No *no, char key[6])
                     found = 1;
                 }
 
-               if(no->isLeaf == 1) printf("page: %d,é folha %s\n", no->RNN, no->keys[0]);
-
             }
         }
     }
